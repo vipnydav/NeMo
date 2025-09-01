@@ -432,7 +432,11 @@ class ASRBPEMixin(ABC):
             # Check if the value is a filepath (new model init) or has `nemo:` in it (restored model)
             if isinstance(v, str) and os.path.exists(v):
                 # local file from first instantiation
-                loc = shutil.copy2(v, dir)
+                try:
+                    loc = shutil.copy2(v, dir)
+                except OSError as e:
+                    logging.warning(f"shutil.copy2 failed with {e}. Falling back to shutil.copy.")
+                    loc = shutil.copy(v, dir)
                 logging.info(f"Saved {k} at {loc}")
 
             if isinstance(v, str) and v.startswith('nemo:'):

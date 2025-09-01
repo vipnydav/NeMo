@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Union
 import fiddle as fdl
 
+from nemo.utils import logging
+
 from nemo.lightning.io.artifact.base import Artifact
 
 
@@ -53,7 +55,11 @@ def copy_file(src: Union[Path, str], path: Union[Path, str], relative_dst: Union
     output = pathize(path) / relative_path
     if output.exists():
         raise FileExistsError(f"Dst file already exists {str(output)}")
-    shutil.copy2(src, output)
+    try:
+        shutil.copy2(src, output)
+    except OSError as e:
+        logging.warning(f"shutil.copy2 failed with {e}. Falling back to shutil.copy.")
+        shutil.copy(src, output)
     return relative_path
 
 

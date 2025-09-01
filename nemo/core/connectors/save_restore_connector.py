@@ -467,7 +467,11 @@ class SaveRestoreConnector:
                     # Note uuid.uuid4().hex is guaranteed to be 32 character long
                     artifact_base_name = os.path.basename(artiitem.path)
                     artifact_uniq_name = f"{uuid.uuid4().hex}_{artifact_base_name}"
-                    shutil.copy2(artiitem.path, os.path.join(nemo_file_folder, artifact_uniq_name))
+                    try:
+                        shutil.copy2(artiitem.path, os.path.join(nemo_file_folder, artifact_uniq_name))
+                    except OSError as e:
+                        logging.warning(f"shutil.copy2 failed with {e}. Falling back to shutil.copy.")
+                        shutil.copy(artiitem.path, os.path.join(nemo_file_folder, artifact_uniq_name))
 
                     # Update artifacts registry
                     artiitem.hashed_path = "nemo:" + artifact_uniq_name
@@ -535,7 +539,11 @@ class SaveRestoreConnector:
                     for path in restoration_paths:
                         if self.model_extracted_dir:
                             for rel_path in artifact_rel_paths[path]:
-                                shutil.copy2(src=rel_path, dst=archive_dir)
+                                try:
+                                    shutil.copy2(src=rel_path, dst=archive_dir)
+                                except OSError as e:
+                                    logging.warning(f"shutil.copy2 failed with {e}. Falling back to shutil.copy.")
+                                    shutil.copy(src=rel_path, dst=archive_dir)
                         else:
                             self._unpack_nemo_file(
                                 path2file=path, out_folder=archive_dir, members=artifact_rel_paths[path]
@@ -549,7 +557,11 @@ class SaveRestoreConnector:
                             artifact_base_name = os.path.basename(artiitem.path)
                         # no need to hash here as we are in tarfile_artifacts which are already hashed
                         artifact_uniq_name = artifact_base_name
-                        shutil.copy2(artifact_base_name, os.path.join(nemo_file_folder, artifact_uniq_name))
+                        try:
+                            shutil.copy2(artifact_base_name, os.path.join(nemo_file_folder, artifact_uniq_name))
+                        except OSError as e:
+                            logging.warning(f"shutil.copy2 failed with {e}. Falling back to shutil.copy.")
+                            shutil.copy(artifact_base_name, os.path.join(nemo_file_folder, artifact_uniq_name))
 
                         # Update artifacts registry
                         new_artiitem = model_utils.ArtifactItem()
