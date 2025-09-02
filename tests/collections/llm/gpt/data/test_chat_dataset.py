@@ -93,7 +93,7 @@ LLAMA_31_CHAT_TEMPLATE_WITH_GENERATION_TAGS = """{{- bos_token }}
 @pytest.fixture
 def mock_tokenizer():
     tokenizer = AutoTokenizer(
-        pretrained_model_name="/home/TestData/nemo2_ckpt/Llama3Config8B",
+        pretrained_model_name="/usr/local/google/home/vipinydv/TestData/nemo2_ckpt/Llama3Config8B",
         use_fast=True,
         chat_template=LLAMA_31_CHAT_TEMPLATE_WITH_GENERATION_TAGS,
     )
@@ -283,7 +283,7 @@ def test_create_dataset_with_hf_template(temp_dataset_dir, mock_tokenizer):
 
 class TestPreprocess:
     tokenizer = AutoTokenizer(
-        pretrained_model_name="/home/TestData/nemo2_ckpt/Llama3Config8B",
+        pretrained_model_name="/usr/local/google/home/vipinydv/TestData/nemo2_ckpt/Llama3Config8B",
         use_fast=True,
         chat_template=LLAMA_31_CHAT_TEMPLATE_WITH_GENERATION_TAGS,
     )

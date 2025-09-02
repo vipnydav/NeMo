@@ -21,7 +21,7 @@ from unittest import mock
 
 import numpy as np
 import pytest
-import soundfile as sf
+import soundfile as sf, torch
 import torch.cuda
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
@@ -40,6 +40,7 @@ from nemo.collections.asr.data.audio_to_text_dali import (
     is_dali_supported,
 )
 from nemo.collections.asr.data.audio_to_text_dataset import inject_dataloader_value_from_model_config
+from nemo.collections.asr.parts.mixins.mixins import ASRBPEMixin
 from nemo.collections.asr.data.feature_to_text import FeatureToBPEDataset, FeatureToCharDataset
 from nemo.collections.asr.models.ctc_models import EncDecCTCModel
 from nemo.collections.asr.parts.utils.manifest_utils import write_manifest
@@ -719,6 +720,42 @@ class TestASRDatasets:
                     assert torch.equal(feat, masked_sample)
 
             assert cnt == num_samples
+
+    @pytest.mark.unit
+    def test_save_tokenizer_fallback(self, test_data_dir):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # setup a mock model with the mixin
+            class MockModel(ASRBPEMixin):
+                def __init__(self, tokenizer_cfg):
+                    self.artifacts = {}
+                    self.cfg = OmegaConf.create({'tokenizer': tokenizer_cfg})
+                    self._setup_tokenizer(self.cfg.tokenizer)
+                    self.model_guid = "test"
+
+                def register_artifact(self, config_path: str, src: str, verify_src_exists: bool = True):
+                    # Simplified register_artifact for test
+                    self.artifacts[config_path] = src
+                    with open_dict(self.cfg.tokenizer):
+                        self.cfg.tokenizer[config_path.split('.')[-1]] = src
+                    return src
+
+                def from_config_dict(self, cfg):
+                    return None
+
+            tokenizer_dir = os.path.join(test_data_dir, "asr", "tokenizers", "an4_wpe_128")
+            tokenizer_cfg = {
+                'dir': tokenizer_dir,
+                'type': 'wpe',
+            }
+
+            model = MockModel(tokenizer_cfg)
+
+            with mock.patch('shutil.copy2', side_effect=OSError("Disk full")):
+                with mock.patch('shutil.copy') as mock_copy:
+                    with mock.patch('nemo.collections.asr.parts.mixins.mixins.logging') as mock_logging:
+                        model.save_tokenizers(tmpdir)
+                        mock_copy.assert_called()
+                        mock_logging.warning.assert_called_with(mock.ANY)
 
     @pytest.mark.unit
     def test_feature_with_rttm_to_text_bpe_dataset(self, test_data_dir):

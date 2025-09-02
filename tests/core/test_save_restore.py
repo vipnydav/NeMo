@@ -16,7 +16,9 @@ import json
 import os
 import shutil
 import tempfile
+from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Set, Union
+from unittest import mock
 
 import pytest
 import torch
@@ -25,6 +27,7 @@ from omegaconf import DictConfig, OmegaConf, open_dict
 from nemo.collections.asr.models import EncDecCTCModel, EncDecCTCModelBPE
 from nemo.core.classes import ModelPT
 from nemo.core.connectors import save_restore_connector
+from nemo.lightning.io.artifact.file import FileArtifact, copy_file
 from nemo.utils.app_state import AppState
 from nemo.utils.exceptions import NeMoBaseException
 
@@ -1331,6 +1334,67 @@ class TestSaveRestore:
         restored_state_dict = restored_model.state_dict()
         for orig, restored in zip(original_state_dict.keys(), restored_state_dict.keys()):
             assert (original_state_dict[orig] - restored_state_dict[restored]).abs().mean() < 1e-6
+
+    @pytest.mark.unit
+    def test_save_to_artifact_fallback(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a dummy artifact file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".txt") as f:
+                artifact_path = f.name
+                f.write(b"test artifact data")
+
+            # Create a mock model and register the artifact
+            cfg = _mock_model_config()
+            model = MockModel(cfg=cfg.model)
+            model.register_artifact("test_artifact.file", artifact_path)
+
+            save_path = os.path.join(tmpdir, "model.nemo")
+
+            with mock.patch('shutil.copy2', side_effect=OSError("Disk full")):
+                with mock.patch('shutil.copy') as mock_copy:
+                    with mock.patch('nemo.core.connectors.save_restore_connector.logging') as mock_logging:
+                        model.save_to(save_path)
+                        # There are multiple fallbacks, so we check if copy was called at all.
+                        mock_copy.assert_called()
+                        mock_logging.warning.assert_called_with(mock.ANY)
+
+            os.remove(artifact_path)
+
+    @pytest.mark.unit
+    def test_copy_file_fallback(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src_file = Path(tmpdir) / "source.txt"
+            src_file.touch()
+            dst_dir = Path(tmpdir) / "dest"
+            dst_dir.mkdir()
+            relative_dst = Path(".")
+
+            with mock.patch('shutil.copy2', side_effect=OSError("Disk full")):
+                with mock.patch('shutil.copy') as mock_copy:
+                    with mock.patch('nemo.lightning.io.artifact.file.logging') as mock_logging:
+                        output_path = copy_file(src_file, dst_dir, relative_dst)
+                        expected_dest = dst_dir / relative_dst / src_file.name
+                        mock_copy.assert_called_once_with(str(src_file), str(expected_dest))
+                        mock_logging.warning.assert_called_with(mock.ANY)
+                        assert output_path == (relative_dst / src_file.name)
+
+    @pytest.mark.unit
+    def test_file_artifact_dump_fallback(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src_file = Path(tmpdir) / "source.txt"
+            src_file.write_text("hello")
+            absolute_dir = Path(tmpdir) / "artifacts"
+            absolute_dir.mkdir()
+            relative_dir = Path(".")
+
+            artifact = FileArtifact(attr="test_file")
+
+            with mock.patch('shutil.copy2', side_effect=OSError("Disk full")):
+                with mock.patch('shutil.copy') as mock_copy:
+                    with mock.patch('nemo.lightning.io.artifact.file.logging') as mock_logging:
+                        artifact.dump(None, str(src_file), absolute_dir, relative_dir)
+                        mock_copy.assert_called_once()
+                        mock_logging.warning.assert_called_with(mock.ANY)
 
     @pytest.mark.unit
     def test_hf_model_filter(self):
